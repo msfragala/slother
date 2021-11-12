@@ -1,0 +1,35 @@
+{
+  "name": "slother",
+  "version": "0.0.0",
+  "description": "",
+  "main": "./dist/slother.js",
+  "module": "./dist/slother.esm.js",
+  "license": "MIT",
+  "scripts": {
+    "build": "node esbuild.mjs"
+  },
+  "homepage": "https://github.com/msfragala/slother#readme",
+  "author": {
+    "name": "Mitchell Fragala",
+    "email": "ms.fragala@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msfragala/slother.git"
+  },
+  "bugs": {
+    "url": "https://github.com/msfragala/slother/issues"
+  },
+  "keywords": [
+    "web worker",
+    "worker",
+    "idle",
+    "lazy",
+    "thread pool",
+    "thread",
+    "pool"
+  ],
+  "devDependencies": {
+    "esbuild": "^0.13.13"
+  }
+}
