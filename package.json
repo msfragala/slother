@@ -30,6 +30,7 @@
     "pool"
   ],
   "devDependencies": {
-    "esbuild": "^0.13.13"
+    "esbuild": "^0.13.13",
+    "parcel": "^2.0.1"
   }
 }
