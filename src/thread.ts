@@ -20,7 +20,7 @@ interface ThreadOptions {
 export class Thread {
   #taskCount: number = 0;
   #importWorker: WorkerImport;
-  #worker: Promise<Worker>;
+  #worker?: Promise<Worker>;
   #concurrency: number;
   #queue: Task[] = [];
   #pending: number[] = [];
@@ -64,13 +64,17 @@ export class Thread {
 
   async #scheduleTask() {
     if (!this.available()) return;
-    if (this.#queue.length === 0) return;
 
-    const { transfer, ...task } = this.#queue.shift();
+    const item = this.#queue.shift();
+
+    if (!item) return;
+
+    const { transfer, ...task } = item;
+
     this.#pending.push(task.id);
 
     const worker = await this.worker();
-    worker.postMessage(task, transfer);
+    worker.postMessage(task, transfer ?? []);
   }
 }
 

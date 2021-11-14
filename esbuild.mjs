@@ -8,6 +8,7 @@ const outputs = [
   {
     format: "esm",
     outfile: "./dist/slother.esm.js",
+    target: "es2020",
   },
   {
     format: "cjs",

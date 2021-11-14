@@ -1,10 +1,10 @@
 import { Thread } from ".";
 import type { Action, WorkerImport } from "./thread";
-import mitt from "mitt";
+import { createNanoEvents, Unsubscribe } from "nanoevents";
 
 type PoolEvent = {
-  message: { id: number; payload: unknown };
-  error: { id: number; error: unknown };
+  [key: `message:${string}`]: (payload: unknown) => void;
+  [key: `error:${string}`]: (error: unknown) => void;
 };
 
 interface QueuedAction {
@@ -24,7 +24,7 @@ export class Pool {
   #concurrentTasks: number;
   #threads: Thread[] = [];
   #queue: QueuedAction[] = [];
-  #mitt = mitt<PoolEvent>();
+  #emitter = createNanoEvents<PoolEvent>();
 
   constructor(importWorker: WorkerImport, options: Partial<PoolOptions>) {
     this.#importWorker = importWorker;
@@ -40,21 +40,24 @@ export class Pool {
   }
 
   #scheduleAction() {
-    if (this.#queue.length === 0) return;
+    const item = this.#queue.shift();
+
+    if (!item) return;
 
     let thread = this.#threads.find((t) => t.available());
     thread ??= this.#spawnThread();
 
     if (!thread) return;
 
-    const { id, action } = this.#queue.shift();
+    const { id, action } = item;
+
     thread
       .dispatch(action)
       .then((payload) => {
-        this.#mitt.emit("message", { id, payload });
+        this.#emitter.emit(`message:${id}`, payload);
       })
       .catch((error) => {
-        this.#mitt.emit("error", { id, error });
+        this.#emitter.emit(`error:${id}`, error);
       })
       .finally(() => {
         this.#scheduleAction();
@@ -73,18 +76,20 @@ export class Pool {
   }
 
   #waitForTask(id: number): Promise<unknown> {
-    const self = this;
     return new Promise((resolve, reject) => {
-      this.#mitt.on("message", function listener(event) {
-        if (event.id !== id) return;
-        resolve(event.payload);
-        self.#mitt.off("message", listener);
+      let unMessage: Unsubscribe;
+      let unError: Unsubscribe;
+
+      unMessage = this.#emitter.on(`message:${id}`, (payload) => {
+        resolve(payload);
+        unMessage?.();
+        unError?.();
       });
 
-      this.#mitt.on("error", function listener(event) {
-        if (event.id !== id) return;
-        reject(event.error);
-        self.#mitt.off("error", listener);
+      unError = this.#emitter.on(`error:${id}`, (error) => {
+        reject(error);
+        unMessage?.();
+        unError?.();
       });
     });
   }
