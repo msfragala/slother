@@ -1,13 +1,13 @@
-type WorkerImport = () => Promise<Worker>;
+export type WorkerImport = () => Promise<Worker>;
 
-interface Task {
+export interface Task {
   id: number;
   type: string;
   payload: any;
   transfer?: Transferable[];
 }
 
-interface Action {
+export interface Action {
   type: string;
   payload: any;
   transfer?: Transferable[];
@@ -26,7 +26,7 @@ export class Thread {
   #pending: number[] = [];
 
   constructor(importWorker: WorkerImport, options: Partial<ThreadOptions>) {
-    this.#concurrency = options.concurrency ?? 4;
+    this.#concurrency = options?.concurrency ?? 4;
     this.#importWorker = importWorker;
   }
 
@@ -46,6 +46,10 @@ export class Thread {
     });
   }
 
+  available(): boolean {
+    return this.#pending.length < this.#concurrency;
+  }
+
   async #waitForTask(id: number): Promise<unknown> {
     const worker = await this.worker();
     return new Promise((resolve, reject) => {
@@ -59,7 +63,7 @@ export class Thread {
   }
 
   async #scheduleTask() {
-    if (this.#pending.length >= this.#concurrency) return;
+    if (!this.available()) return;
     if (this.#queue.length === 0) return;
 
     const { transfer, ...task } = this.#queue.shift();

@@ -1,11 +1,10 @@
-import { Thread } from "../src";
+import { Pool, Thread } from "../src";
 
-const thread = new Thread(
-  () => new Worker(new URL("./worker.js", import.meta.url), { type: "module" }),
-  { concurrency: 10 }
+const thread = new Pool(
+  () => new Worker(new URL("./worker.js", import.meta.url), { type: "module" })
 );
 
-[
+const names = [
   "Olivia",
   "Emma",
   "Ava",
@@ -34,11 +33,15 @@ const thread = new Thread(
   "Aria",
   "Chloe",
   "Grace",
-].forEach((name) => {
-  thread
-    .dispatch({
-      type: "hello",
-      payload: name,
-    })
-    .then(console.log);
-});
+];
+
+window.run = () => {
+  names.forEach((name) => {
+    thread
+      .dispatch({
+        type: "hello",
+        payload: name,
+      })
+      .then(console.log);
+  });
+};
