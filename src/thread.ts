@@ -17,6 +17,10 @@ interface ThreadOptions {
   concurrency?: number;
 }
 
+export interface Thread {
+  new (importWorker: WorkerImport, options?: Partial<ThreadOptions>): Thread;
+}
+
 export class Thread {
   #taskCount: number = 0;
   #importWorker: WorkerImport;
@@ -25,7 +29,7 @@ export class Thread {
   #queue: Task[] = [];
   #pending: number[] = [];
 
-  constructor(importWorker: WorkerImport, options: Partial<ThreadOptions>) {
+  constructor(importWorker: WorkerImport, options?: Partial<ThreadOptions>) {
     this.#concurrency = options?.concurrency ?? 4;
     this.#importWorker = importWorker;
   }

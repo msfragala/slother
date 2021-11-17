@@ -17,6 +17,10 @@ interface PoolOptions {
   concurrentTasks: number;
 }
 
+export interface Pool {
+  new (importWorker: WorkerImport, options?: Partial<PoolOptions>): Pool;
+}
+
 export class Pool {
   #actionCount = 0;
   #importWorker: WorkerImport;
@@ -26,7 +30,7 @@ export class Pool {
   #queue: QueuedAction[] = [];
   #emitter = createNanoEvents<PoolEvent>();
 
-  constructor(importWorker: WorkerImport, options: Partial<PoolOptions>) {
+  constructor(importWorker: WorkerImport, options?: Partial<PoolOptions>) {
     this.#importWorker = importWorker;
     this.#concurrentThreads = options?.concurrentThreads ?? 12;
     this.#concurrentTasks = options?.concurrentTasks ?? 2;
