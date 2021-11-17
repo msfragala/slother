@@ -1,23 +1,28 @@
-export function expose(actors: { [key: string]: Function }) {
-  self.addEventListener("message", (event) => {
-    if (!event?.data?.id) return;
+import { Action } from "./thread";
 
-    const { id, type, payload } = event.data;
-
-    if (!actors[type]) return;
-
-    try {
-      Promise.resolve(actors[type](payload)).then((result) => {
-        self.postMessage({ id, payload: result });
-      });
-    } catch (error) {
-      self.postMessage({ id, error });
-    }
-  });
+interface IncomingMessage {
+  id: number;
+  action: Action;
 }
 
-expose({
-  a(a: number): number {
-    return 1 + a;
-  },
-});
+interface Actions {
+  [key: string]: (payload: any) => Promise<any>;
+}
+
+export function expose(actors: Actions) {
+  self.addEventListener("message", async (event) => {
+    if (!event?.data?.id) return;
+    if (!event?.data?.action?.name) return;
+    const { id, action } = event.data as IncomingMessage;
+
+    if (!actors[action.name]) return;
+
+    actors[action.name](action.payload)
+      .then((payload) => {
+        self.postMessage({ id, payload });
+      })
+      .catch((error) => {
+        self.postMessage({ id, error });
+      });
+  });
+}

@@ -1,16 +1,11 @@
 import { Thread } from ".";
-import type { Action, WorkerImport } from "./thread";
+import type { Action, Message, WorkerImport } from "./thread";
 import { createNanoEvents, Unsubscribe } from "nanoevents";
 
 type PoolEvent = {
   [key: `message:${string}`]: (payload: unknown) => void;
   [key: `error:${string}`]: (error: unknown) => void;
 };
-
-interface QueuedAction {
-  id: number;
-  action: Action;
-}
 
 interface PoolOptions {
   concurrentThreads: number;
@@ -27,7 +22,7 @@ export class Pool {
   #concurrentThreads: number;
   #concurrentTasks: number;
   #threads: Thread[] = [];
-  #queue: QueuedAction[] = [];
+  #queue: Message[] = [];
   #emitter = createNanoEvents<PoolEvent>();
 
   constructor(importWorker: WorkerImport, options?: Partial<PoolOptions>) {
@@ -36,27 +31,27 @@ export class Pool {
     this.#concurrentTasks = options?.concurrentTasks ?? 2;
   }
 
-  dispatch(action: Action): Promise<unknown> {
+  postMessage(action: Action, transfer?: Transferable[]): Promise<unknown> {
     const id = ++this.#actionCount;
-    this.#queue.push({ id, action });
+    this.#queue.push({ id, action, transfer });
     this.#scheduleAction();
     return this.#waitForTask(id);
   }
 
   #scheduleAction() {
-    const item = this.#queue.shift();
+    const task = this.#queue.shift();
 
-    if (!item) return;
+    if (!task) return;
 
     let thread = this.#threads.find((t) => t.available());
     thread ??= this.#spawnThread();
 
     if (!thread) return;
 
-    const { id, action } = item;
+    const { id, action, transfer } = task;
 
     thread
-      .dispatch(action)
+      .postMessage(action, transfer)
       .then((payload) => {
         this.#emitter.emit(`message:${id}`, payload);
       })

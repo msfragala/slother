@@ -1,15 +1,13 @@
 export type WorkerImport = () => Promise<Worker>;
 
-export interface Task {
-  id: number;
-  type: string;
+export interface Action {
+  name: string;
   payload: any;
-  transfer?: Transferable[];
 }
 
-export interface Action {
-  type: string;
-  payload: any;
+export interface Message {
+  id: number;
+  action: Action;
   transfer?: Transferable[];
 }
 
@@ -26,7 +24,7 @@ export class Thread {
   #importWorker: WorkerImport;
   #worker?: Promise<Worker>;
   #concurrency: number;
-  #queue: Task[] = [];
+  #queue: Message[] = [];
   #pending: number[] = [];
 
   constructor(importWorker: WorkerImport, options?: Partial<ThreadOptions>) {
@@ -39,9 +37,9 @@ export class Thread {
     return this.#worker;
   }
 
-  dispatch(action: Action): Promise<unknown> {
+  postMessage(action: Action, transfer?: Transferable[]): Promise<unknown> {
     const id = ++this.#taskCount;
-    this.#queue.push({ id, ...action });
+    this.#queue.push({ id, action, transfer });
     this.#scheduleTask();
     return this.#waitForTask(id).then((data) => {
       remove(this.#pending, id);
@@ -69,16 +67,16 @@ export class Thread {
   async #scheduleTask() {
     if (!this.available()) return;
 
-    const item = this.#queue.shift();
+    const task = this.#queue.shift();
 
-    if (!item) return;
+    if (!task) return;
 
-    const { transfer, ...task } = item;
+    const { id, action, transfer } = task;
 
-    this.#pending.push(task.id);
+    this.#pending.push(id);
 
     const worker = await this.worker();
-    worker.postMessage(task, transfer ?? []);
+    worker.postMessage({ id, action }, transfer ?? []);
   }
 }
 
