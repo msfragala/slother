@@ -1,4 +1,4 @@
-import { Action } from "./thread";
+import { Action } from './thread';
 
 interface IncomingMessage {
   id: number;
@@ -10,19 +10,17 @@ interface Actions {
 }
 
 export function expose(actors: Actions) {
-  self.addEventListener("message", async (event) => {
+  self.addEventListener('message', async (event) => {
     if (!event?.data?.id) return;
     if (!event?.data?.action?.name) return;
     const { id, action } = event.data as IncomingMessage;
 
     if (!actors[action.name]) return;
-
-    actors[action.name](action.payload)
-      .then((payload) => {
-        self.postMessage({ id, payload });
-      })
-      .catch((error) => {
-        self.postMessage({ id, error });
-      });
+    try {
+      const payload = await actors[action.name](action.payload);
+      self.postMessage({ id, payload });
+    } catch (error) {
+      self.postMessage({ id, error });
+    }
   });
 }

@@ -1,4 +1,4 @@
-export type WorkerImport = () => Promise<Worker>;
+export type WorkerImport = () => Promise<Worker> | Worker;
 
 export interface Action {
   name: string;
@@ -11,8 +11,14 @@ export interface Message {
   transfer?: Transferable[];
 }
 
+export interface ThreadMeta {
+  workerCreated: boolean;
+  queueLength: number;
+  pendingLength: number;
+}
+
 interface ThreadOptions {
-  concurrency?: number;
+  maxConcurrentMessages?: number;
 }
 
 export interface Thread {
@@ -20,24 +26,34 @@ export interface Thread {
 }
 
 export class Thread {
+  #closing: boolean = false;
   #taskCount: number = 0;
   #importWorker: WorkerImport;
   #worker?: Promise<Worker>;
-  #concurrency: number;
+  #maxConcurrentMessages: number;
   #queue: Message[] = [];
   #pending: number[] = [];
 
   constructor(importWorker: WorkerImport, options?: Partial<ThreadOptions>) {
-    this.#concurrency = options?.concurrency ?? 4;
+    this.#maxConcurrentMessages = options?.maxConcurrentMessages ?? 4;
     this.#importWorker = importWorker;
   }
 
+  get meta(): ThreadMeta {
+    return {
+      workerCreated: Boolean(this.#worker),
+      queueLength: this.#queue.length,
+      pendingLength: this.#pending.length,
+    };
+  }
+
   worker() {
-    this.#worker ??= this.#importWorker();
+    this.#worker ??= Promise.resolve(this.#importWorker());
     return this.#worker;
   }
 
   postMessage(action: Action, transfer?: Transferable[]): Promise<unknown> {
+    if (this.#closing) return Promise.resolve();
     const id = ++this.#taskCount;
     this.#queue.push({ id, action, transfer });
     this.#scheduleTask();
@@ -49,22 +65,29 @@ export class Thread {
   }
 
   available(): boolean {
-    return this.#pending.length < this.#concurrency;
+    return this.#pending.length < this.#maxConcurrentMessages;
+  }
+
+  terminate() {
+    this.#closing = true;
+    if (!this.#worker) return Promise.resolve();
+    return this.#worker.then((w) => w.terminate());
   }
 
   async #waitForTask(id: number): Promise<unknown> {
     const worker = await this.worker();
     return new Promise((resolve, reject) => {
-      worker.addEventListener("message", function listener(event) {
+      worker.addEventListener('message', function listener(event) {
         if (event?.data?.id !== id) return;
         if (event.data.error) reject(event.data.error);
         else resolve(event.data.payload);
-        worker.removeEventListener("message", listener);
+        worker.removeEventListener('message', listener);
       });
     });
   }
 
   async #scheduleTask() {
+    if (this.#closing) return;
     if (!this.available()) return;
 
     const task = this.#queue.shift();

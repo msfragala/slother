@@ -1,62 +1,86 @@
-import { Thread } from ".";
-import type { Action, Message, WorkerImport } from "./thread";
-import { createNanoEvents, Unsubscribe } from "nanoevents";
+import { Thread } from '.';
+import type { Action, Message, ThreadMeta, WorkerImport } from './thread';
 
-type PoolEvent = {
-  [key: `message:${string}`]: (payload: unknown) => void;
-  [key: `error:${string}`]: (error: unknown) => void;
-};
+type MessageListener = (data: { payload?: any; error?: any }) => void;
 
 interface PoolOptions {
-  concurrentThreads: number;
-  concurrentTasks: number;
+  maxConcurrentThreads: number;
+  maxConcurrentMessages: number;
+}
+
+interface PoolMeta {
+  threads: ThreadMeta[];
+  queueLength: number;
+  maxConcurrentThreads: number;
+  maxConcurrentMessages: number;
 }
 
 export interface Pool {
   new (importWorker: WorkerImport, options?: Partial<PoolOptions>): Pool;
+  terminate(): Promise<void>;
+  postMessage(action: Action, transfer?: Transferable[]): Promise<unknown>;
 }
 
 export class Pool {
   #actionCount = 0;
   #importWorker: WorkerImport;
-  #concurrentThreads: number;
-  #concurrentTasks: number;
+  #maxConcurrentThreads: number;
+  #maxConcurrentMessages: number;
   #threads: Thread[] = [];
   #queue: Message[] = [];
-  #emitter = createNanoEvents<PoolEvent>();
+  #listeners: Record<number, MessageListener> = {};
 
   constructor(importWorker: WorkerImport, options?: Partial<PoolOptions>) {
     this.#importWorker = importWorker;
-    this.#concurrentThreads = options?.concurrentThreads ?? 12;
-    this.#concurrentTasks = options?.concurrentTasks ?? 2;
+    this.#maxConcurrentThreads = options?.maxConcurrentThreads ?? 12;
+    this.#maxConcurrentMessages = options?.maxConcurrentMessages ?? 4;
+  }
+
+  get meta(): PoolMeta {
+    return {
+      threads: this.#threads.map((t) => t.meta),
+      queueLength: this.#queue.length,
+      maxConcurrentThreads: this.#maxConcurrentThreads,
+      maxConcurrentMessages: this.#maxConcurrentMessages,
+    };
   }
 
   postMessage(action: Action, transfer?: Transferable[]): Promise<unknown> {
     const id = ++this.#actionCount;
     this.#queue.push({ id, action, transfer });
     this.#scheduleAction();
-    return this.#waitForTask(id);
+    return new Promise((resolve, reject) => {
+      this.#listeners[id] = ({ payload, error }) => {
+        this.#scheduleAction();
+        if (error) reject(error);
+        else resolve(payload);
+      };
+    });
   }
 
   #scheduleAction() {
-    const task = this.#queue.shift();
-
-    if (!task) return;
+    if (this.#queue.length === 0) return;
 
     let thread = this.#threads.find((t) => t.available());
     thread ??= this.#spawnThread();
 
     if (!thread) return;
 
+    const task = this.#queue.shift();
+
+    if (!task) return;
+
     const { id, action, transfer } = task;
 
     thread
       .postMessage(action, transfer)
       .then((payload) => {
-        this.#emitter.emit(`message:${id}`, payload);
+        this.#listeners[id]?.({ payload });
+        delete this.#listeners[id];
       })
       .catch((error) => {
-        this.#emitter.emit(`error:${id}`, error);
+        this.#listeners[id]?.({ error });
+        delete this.#listeners[id];
       })
       .finally(() => {
         this.#scheduleAction();
@@ -64,32 +88,17 @@ export class Pool {
   }
 
   #spawnThread() {
-    if (this.#threads.length >= this.#concurrentThreads) return;
+    if (this.#threads.length >= this.#maxConcurrentThreads) return;
 
     const thread = new Thread(this.#importWorker, {
-      concurrency: this.#concurrentTasks,
+      maxConcurrentMessages: this.#maxConcurrentMessages,
     });
 
     this.#threads.push(thread);
     return thread;
   }
 
-  #waitForTask(id: number): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      let unMessage: Unsubscribe;
-      let unError: Unsubscribe;
-
-      unMessage = this.#emitter.on(`message:${id}`, (payload) => {
-        resolve(payload);
-        unMessage?.();
-        unError?.();
-      });
-
-      unError = this.#emitter.on(`error:${id}`, (error) => {
-        reject(error);
-        unMessage?.();
-        unError?.();
-      });
-    });
+  async terminate() {
+    await Promise.all(this.#threads.map((thread) => thread.terminate()));
   }
 }
