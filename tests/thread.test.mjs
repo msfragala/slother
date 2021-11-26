@@ -42,9 +42,7 @@ test('Queues messages that exceed concurrency threshold', async ({ thread }) => 
 });
 
 test('Sends queued messages once within concurrency threshold', async ({ thread }) => {
-  thread.postMessage({ name: 'no-match' });
-  thread.postMessage({ name: 'no-match' });
-  thread.postMessage({ name: 'no-match' });
+  repeat(3, () => thread.postMessage({ name: 'no-match' }));
   const sleepTask = thread.postMessage({ name: 'sleep', payload: 0 });
   thread.postMessage({ name: 'hello', payload: 'red-sworn-diameter' });
   assert.is(thread.meta.pendingLength, 4);
@@ -62,6 +60,20 @@ test('Uses concurrency option when specified', async () => {
   assert.is(thread.meta.pendingLength, 6);
   assert.is(thread.meta.queueLength, 2);
   thread.terminate();
+});
+
+test('Thread::postMessage resolves to worker response', async ({ thread }) => {
+  const response = await thread.postMessage({ name: 'hello', payload: '1k#9d8' });
+  assert.is(response, 'Hello, 1k#9d8');
+});
+
+test('Thread::postMessage rejects with caught error', async ({ thread }) => {
+  try {
+    await thread.postMessage({ name: 'error' });
+  } catch (error) {
+    assert.instance(error, Error);
+    assert.is(error.message, 'Fake error');
+  }
 });
 
 test.run();

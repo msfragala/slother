@@ -1,5 +1,5 @@
 import './lib/setup/main-thread.mjs';
-import { test } from 'uvu';
+import { test, suite } from 'uvu';
 import * as assert from 'uvu/assert';
 import { Pool } from '../dist/slother.mjs';
 import { resolve } from 'node:path';
@@ -53,6 +53,20 @@ test('Posts queued messages when a thread is idle', async ({ pool }) => {
   assert.is(pool.meta.queueLength, 1);
   await sleepTask;
   assert.is(pool.meta.queueLength, 0);
+});
+
+test('Pool::postMessage resolves to worker response', async ({ pool }) => {
+  const response = await pool.postMessage({ name: 'hello', payload: '1k#9d8' });
+  assert.is(response, 'Hello, 1k#9d8');
+});
+
+test('Pool::postMessage rejects with caught error', async ({ pool }) => {
+  try {
+    await pool.postMessage({ name: 'error' });
+  } catch (error) {
+    assert.instance(error, Error);
+    assert.is(error.message, 'Fake error');
+  }
 });
 
 test.run();

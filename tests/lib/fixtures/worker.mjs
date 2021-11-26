@@ -10,4 +10,7 @@ expose({
       setTimeout(() => resolve(), duration);
     });
   },
+  error() {
+    throw new Error('Fake error');
+  },
 });
