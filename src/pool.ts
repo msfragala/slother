@@ -1,5 +1,5 @@
 import { Thread } from '.';
-import type { Action, Message, ThreadMeta, WorkerImport } from './thread';
+import type { Action, AsyncMethods, Message, ThreadMeta, WorkerImport } from './thread';
 
 type MessageListener = (data: { payload?: any; error?: any }) => void;
 
@@ -29,6 +29,21 @@ export class Pool {
   #threads: Thread[] = [];
   #queue: Message[] = [];
   #listeners: Record<number, MessageListener> = {};
+
+  static proxy<T extends AsyncMethods>(...args: ConstructorParameters<Pool>): T & { self: Pool } {
+    const pool = new Pool(...args);
+    return new Proxy(
+      {},
+      {
+        get(_, name: string) {
+          if (name === 'self') return pool;
+          return (payload: unknown, transfer?: Transferable[]) => {
+            return pool.postMessage({ name, payload }, transfer);
+          };
+        },
+      }
+    ) as any;
+  }
 
   constructor(importWorker: WorkerImport, options?: Partial<PoolOptions>) {
     this.#importWorker = importWorker;

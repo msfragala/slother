@@ -69,4 +69,17 @@ test('Pool::postMessage rejects with caught error', async ({ pool }) => {
   }
 });
 
+test('Pool.proxy — Exposes pool with `self` property', async () => {
+  const proxy = Pool.proxy(createWorker);
+  assert.instance(proxy.self, Pool);
+  await proxy.self.terminate();
+});
+
+test('Pool.proxy — Proxies methods as messages to send', async () => {
+  const proxy = Pool.proxy(createWorker);
+  const response = await proxy.hello('D$09da#@');
+  assert.is(response, 'Hello, D$09da#@');
+  await proxy.self.terminate();
+});
+
 test.run();

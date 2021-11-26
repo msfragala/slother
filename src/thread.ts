@@ -21,6 +21,10 @@ interface ThreadOptions {
   maxConcurrentMessages?: number;
 }
 
+export type AsyncMethods = {
+  [key: string]: (payload: any) => Promise<any>;
+};
+
 export interface Thread {
   new (importWorker: WorkerImport, options?: Partial<ThreadOptions>): Thread;
 }
@@ -33,6 +37,21 @@ export class Thread {
   #maxConcurrentMessages: number;
   #queue: Message[] = [];
   #pending: number[] = [];
+
+  static proxy<T extends AsyncMethods>(...args: ConstructorParameters<Thread>): T & { self: Thread } {
+    const thread = new Thread(...args);
+    return new Proxy(
+      {},
+      {
+        get(_, name: string) {
+          if (name === 'self') return thread;
+          return (payload: unknown, transfer?: Transferable[]) => {
+            return thread.postMessage({ name, payload }, transfer);
+          };
+        },
+      }
+    ) as any;
+  }
 
   constructor(importWorker: WorkerImport, options?: Partial<ThreadOptions>) {
     this.#maxConcurrentMessages = options?.maxConcurrentMessages ?? 4;

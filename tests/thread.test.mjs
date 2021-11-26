@@ -1,5 +1,5 @@
 import './lib/setup/main-thread.mjs';
-import { test } from 'uvu';
+import { test, suite } from 'uvu';
 import { Thread } from '../dist/slother.mjs';
 import * as assert from 'uvu/assert';
 import { resolve } from 'node:path';
@@ -62,18 +62,31 @@ test('Uses concurrency option when specified', async () => {
   thread.terminate();
 });
 
-test('Thread::postMessage resolves to worker response', async ({ thread }) => {
+test('Thread::postMessage — Resolves to worker response', async ({ thread }) => {
   const response = await thread.postMessage({ name: 'hello', payload: '1k#9d8' });
   assert.is(response, 'Hello, 1k#9d8');
 });
 
-test('Thread::postMessage rejects with caught error', async ({ thread }) => {
+test('Thread::postMessage — Rejects with caught error', async ({ thread }) => {
   try {
     await thread.postMessage({ name: 'error' });
   } catch (error) {
     assert.instance(error, Error);
     assert.is(error.message, 'Fake error');
   }
+});
+
+test('Thread.proxy — Exposes thread with `self` property', async () => {
+  const proxy = Thread.proxy(createWorker);
+  assert.instance(proxy.self, Thread);
+  await proxy.self.terminate();
+});
+
+test('Thread.proxy — Proxies methods as messages to send', async () => {
+  const proxy = Thread.proxy(createWorker);
+  const response = await proxy.hello('D$09da#@');
+  assert.is(response, 'Hello, D$09da#@');
+  await proxy.self.terminate();
 });
 
 test.run();
