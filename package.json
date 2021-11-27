@@ -11,7 +11,9 @@
     "build:types": "tsc",
     "build:js": "node esbuild.mjs",
     "pretest": "yarn build:js",
-    "test": "uvu -i lib"
+    "test": "uvu -i lib",
+    "prerelease": "yarn build",
+    "release": "np"
   },
   "homepage": "https://github.com/msfragala/slother#readme",
   "author": {
